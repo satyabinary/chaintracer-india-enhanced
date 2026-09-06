@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Backend data (regenerated automatically on startup)
+backend/data/*.db
+backend/data/reports/*.pdf
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.env
+
+# Editors / OS
+.DS_Store
+.vscode/
+.idea/

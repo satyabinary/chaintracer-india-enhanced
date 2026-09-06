@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-ink-950 font-sans text-parchment-100 antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #2a3344;
+  border-radius: 6px;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@layer components {
+  .input {
+    @apply w-full rounded-md border border-line-700 bg-ink-850 px-3 py-2 text-sm text-parchment-100 outline-none transition placeholder:text-parchment-500 focus:border-brass-500;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-md bg-brass-500 px-4 py-2 text-sm font-medium text-ink-950 transition hover:bg-brass-400 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-md border border-line-700 px-4 py-2 text-sm font-medium text-parchment-100 transition hover:border-parchment-500;
+  }
+}
