@@ -25,6 +25,7 @@ from app.trace_engine import trace_wallet, build_graph, build_evidence_table
 from app.risk_engine import compute_risk_score
 from app.exchange_list import KNOWN_EXCHANGE_WALLETS, KNOWN_SCAM_WALLETS, KNOWN_MIXER_WALLETS
 from app.database import get_cursor, init_db
+from app.config import DEFAULT_MAX_HOPS
 
 HOUR = 3600 * 1000
 BASE_TS = 1_735_000_000_000  # arbitrary fixed epoch ms so seed data is reproducible
@@ -98,7 +99,7 @@ def _case_1_direct_exchange_match():
         "wallet_address": a, "amount_usdt": amount,
         "notes": "Victim responded to a fake trading-app investment ad on Instagram; "
                  "transferred USDT after being shown a fabricated profit dashboard.",
-        "db": db, "max_hops": 4,
+        "db": db, "max_hops": DEFAULT_MAX_HOPS,
     }
 
 
@@ -124,7 +125,7 @@ def _case_2_in_transit():
         "wallet_address": wallets[0], "amount_usdt": amount,
         "notes": "Task-based 'part-time job' scam — victim was told to complete app "
                  "tasks and paid an upfront USDT 'registration deposit'.",
-        "db": db, "max_hops": 4,
+        "db": db, "max_hops": DEFAULT_MAX_HOPS,
     }
 
 
@@ -146,7 +147,7 @@ def _case_3_sweeper_match():
         "wallet_address": a, "amount_usdt": amount,
         "notes": "Victim paid a refundable 'customs release fee' in USDT for a parcel "
                  "scam initiated over WhatsApp.",
-        "db": db, "max_hops": 4,
+        "db": db, "max_hops": DEFAULT_MAX_HOPS,
     }
 
 
@@ -179,7 +180,7 @@ def _case_4_deep_diluted_match():
         "wallet_address": a, "amount_usdt": amount,
         "notes": "Small 'pig-butchering' style romance scam — early-stage payment before "
                  "victim was asked for a larger sum.",
-        "db": db, "max_hops": 4,
+        "db": db, "max_hops": DEFAULT_MAX_HOPS,
     }
 
 
@@ -203,7 +204,7 @@ def _case_5_mixer_flagged():
         "wallet_address": a, "amount_usdt": amount,
         "notes": "Large 'forex trading mentor' investment fraud; wallet was already "
                  "flagged internally from a prior FIR before this complaint.",
-        "db": db, "max_hops": 4,
+        "db": db, "max_hops": DEFAULT_MAX_HOPS,
     }
 
 
@@ -249,15 +250,17 @@ def seed_if_empty(force: bool = False):
             cur.execute(
                 """INSERT INTO cases (
                     case_number, victim_name, wallet_address, amount_usdt, notes,
-                    status, match_status, matched_exchange, matched_wallet,
+                    status, match_status, matched_exchange, matched_exchange_verified,
+                    matched_exchange_note, matched_wallet,
                     risk_score, priority, error_message,
                     trace_result_json, risk_breakdown_json, graph_json, evidence_json,
                     is_seed, alert_sent, created_at, updated_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     case_number, f"{spec['victim_name']} ({spec['city']})", spec["wallet_address"],
                     spec["amount_usdt"], spec["notes"],
                     "TRACED", trace_result["match_status"], trace_result["matched_exchange"],
+                    trace_result["matched_exchange_verified"], trace_result["matched_exchange_note"],
                     trace_result["matched_wallet"], risk["total_score"], risk["priority"], None,
                     json.dumps(trace_result), json.dumps(risk), json.dumps(graph), json.dumps(evidence),
                     1, 0, filed_on, now,
