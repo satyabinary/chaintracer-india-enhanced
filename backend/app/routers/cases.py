@@ -51,8 +51,8 @@ def list_cases():
     with get_cursor() as cur:
         cur.execute("""
             SELECT case_number, victim_name, wallet_address, amount_usdt, status,
-                   match_status, matched_exchange, matched_exchange_verified, risk_score,
-                   priority, is_seed, alert_sent, created_at
+                   match_status, matched_exchange, risk_score, priority, is_seed,
+                   alert_sent, created_at
             FROM cases ORDER BY id DESC
         """)
         rows = cur.fetchall()
@@ -62,8 +62,6 @@ def list_cases():
         d = dict(r)
         d["is_seed"] = bool(d["is_seed"])
         d["alert_sent"] = bool(d["alert_sent"])
-        if d.get("matched_exchange_verified") is not None:
-            d["matched_exchange_verified"] = bool(d["matched_exchange_verified"])
         out.append(d)
     return out
 
@@ -138,13 +136,11 @@ async def create_case(payload: NewCaseRequest):
     with get_cursor(commit=True) as cur:
         cur.execute(
             """UPDATE cases SET
-                   status=?, match_status=?, matched_exchange=?, matched_exchange_verified=?,
-                   matched_exchange_note=?, matched_wallet=?,
+                   status=?, match_status=?, matched_exchange=?, matched_wallet=?,
                    risk_score=?, priority=?, trace_result_json=?, risk_breakdown_json=?,
                    graph_json=?, evidence_json=?, updated_at=?
                WHERE case_number=?""",
             ("TRACED", trace_result["match_status"], trace_result["matched_exchange"],
-             trace_result["matched_exchange_verified"], trace_result["matched_exchange_note"],
              trace_result["matched_wallet"], risk["total_score"], risk["priority"],
              json.dumps(trace_result), json.dumps(risk), json.dumps(graph),
              json.dumps(evidence), _now(), case_number),
@@ -193,13 +189,6 @@ def send_alert(case_number: str):
     with get_cursor(commit=True) as cur:
         cur.execute("UPDATE cases SET alert_sent=1, updated_at=? WHERE case_number=?", (now, case_number))
 
-    verified = case.get("matched_exchange_verified")
-    confidence_note = (
-        "This is a verified, Tronscan-labeled address."
-        if verified
-        else "Note: this match is against SAMPLE/placeholder data, not a real exchange address."
-    )
-
     return {
         "simulated": True,
         "case_number": case_number,
@@ -207,7 +196,7 @@ def send_alert(case_number: str):
         "message": (
             f"Simulated alert prepared for {case['matched_exchange']}. No real email, SMS, "
             "or API call was sent — connect an official liaison channel to actually notify "
-            f"an exchange or freeze funds. {confidence_note}"
+            "an exchange or freeze funds."
         ),
     }
 

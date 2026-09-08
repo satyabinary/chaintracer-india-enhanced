@@ -16,18 +16,7 @@ HTTP_TIMEOUT_SECONDS = 12
 TRANSFERS_PAGE_LIMIT = 50
 
 # --- Tracing parameters ---------------------------------------------------
-# Max number of hops to follow past the source wallet before giving up and
-# marking a case IN_TRANSIT (an honest "still moving" outcome, not a
-# failure). This is the SINGLE SOURCE OF TRUTH for hop depth across the
-# whole app: trace_engine reads it as the default, seed_data reads it when
-# tracing the demo cases, and any part of the UI or PDF report that needs
-# to say "checked N hops" reads the actual value out of the trace result
-# (trace_result["max_hops"]) rather than hardcoding a number of its own.
-# Override without touching code via the CHAINTRACER_MAX_HOPS env var.
-# (Unit tests deliberately use their own small, fixed hop caps to exercise
-# specific fixture chains — that's a different, intentional kind of
-# "hardcoding" than this, see the comment in tests/test_trace_offline.py.)
-DEFAULT_MAX_HOPS = int(os.environ.get("CHAINTRACER_MAX_HOPS", 6))
+DEFAULT_MAX_HOPS = 4
 SWEEP_PERCENT_THRESHOLD = 0.95      # 95%+ of a wallet's received amount
 SWEEP_WINDOW_HOURS = 24             # ...moved on within 24 hours
 BOT_SPEED_MIN_SAMPLES = 3           # need at least this many outgoing txs to judge rhythm

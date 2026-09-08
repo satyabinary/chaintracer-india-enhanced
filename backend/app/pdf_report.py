@@ -27,8 +27,6 @@ MED_AMBER = colors.HexColor("#B8863B")
 LOW_GREEN = colors.HexColor("#4C7A6B")
 
 PRIORITY_COLORS = {"HIGH": HIGH_RED, "MEDIUM": MED_AMBER, "LOW": LOW_GREEN}
-VERIFIED_GREEN = colors.HexColor("#276749")   # distinct from LOW priority's green — this means "confirmed real"
-SAMPLE_AMBER = colors.HexColor("#9C6B1F")     # caution color for "this is placeholder data"
 
 MATCH_STATUS_LABELS = {
     "EXCHANGE_MATCH": "Confirmed exchange match",
@@ -131,41 +129,6 @@ def _priority_banner(case: dict, styles):
     return t
 
 
-def _exchange_attribution_banner(case: dict, styles):
-    """
-    A dedicated callout for the exchange match result — kept visually
-    separate from the priority banner specifically so a verified match
-    can never be mistaken for (or visually blend in with) a sample-data
-    match. Returns None when there's nothing to attribute (IN_TRANSIT,
-    MIXER_FLAGGED, TRACE_FAILED, or no match yet).
-    """
-    if not case.get("matched_exchange"):
-        return None
-
-    verified = case.get("matched_exchange_verified")
-    note = case.get("matched_exchange_note") or case["matched_exchange"]
-    color = VERIFIED_GREEN if verified else SAMPLE_AMBER
-    heading = "VERIFIED EXCHANGE MATCH" if verified else "SAMPLE-DATA EXCHANGE MATCH — NOT REAL"
-
-    t = Table(
-        [[
-            Paragraph(f"<b>{heading}</b>", ParagraphStyle(
-                name="EAHeading", fontSize=10, textColor=colors.white, fontName="Helvetica-Bold")),
-            Paragraph(note, ParagraphStyle(
-                name="EABody", fontSize=9.5, textColor=colors.white)),
-        ]],
-        colWidths=[62 * mm, 118 * mm],
-    )
-    t.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), color),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING", (0, 0), (-1, -1), 8),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-        ("LEFTPADDING", (0, 0), (0, 0), 12),
-    ]))
-    return t
-
-
 def _risk_breakdown_table(risk_breakdown: dict, styles):
     header = ["Factor", "Raw value", "Weight", "Weighted", "What it means"]
     rows = [header]
@@ -202,8 +165,7 @@ def _hop_trail_table(trace_result: dict, styles):
     for hop in trace_result["hops"]:
         role = "Source wallet (victim-reported)" if hop["hop_index"] == 0 else f"Hop {hop['hop_index']}"
         if hop["is_exchange_match"]:
-            confidence_tag = "Verified" if hop["matched_exchange_verified"] else "Sample"
-            role += f" — {confidence_tag} match: {hop['matched_exchange_name']}"
+            role += f" — matched {hop['matched_exchange_name']}"
         elif hop["is_mixer_flag"]:
             role += " — known mixer, tracing stopped"
         amount = hop["chosen_outgoing"]["amount"] if hop.get("chosen_outgoing") else "—"
@@ -279,14 +241,7 @@ def generate_case_pdf(case: dict) -> str:
     story.append(Spacer(1, 12))
 
     story.append(_priority_banner(case, styles))
-    story.append(Spacer(1, 8))
-
-    exchange_banner = _exchange_attribution_banner(case, styles)
-    if exchange_banner:
-        story.append(exchange_banner)
-        story.append(Spacer(1, 14))
-    else:
-        story.append(Spacer(1, 6))
+    story.append(Spacer(1, 14))
 
     if case.get("is_seed"):
         story.append(Paragraph(

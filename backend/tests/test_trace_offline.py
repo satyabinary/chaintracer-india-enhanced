@@ -111,12 +111,7 @@ def run_test_1_sweeper_and_decoys():
     print(f"evidence rows: {len(evidence)}")
 
     assert result["match_status"] == "SWEEPER_MATCH"
-    assert result["matched_exchange"] == KNOWN_EXCHANGE_WALLETS[EXCHANGE_ADDR]["name"]
-    # EXCHANGE_ADDR is one of the SAMPLE placeholder addresses, not a real
-    # Tronscan-labeled one — confirm that distinction survives the whole
-    # pipeline instead of getting lost or defaulting to "verified" by mistake.
-    assert result["matched_exchange_verified"] is False
-    assert "Sample match" in result["matched_exchange_note"]
+    assert result["matched_exchange"] == KNOWN_EXCHANGE_WALLETS[EXCHANGE_ADDR]
     assert score["factors"]["sweep_timing_match"]["raw_value"] == 1.0
     assert score["priority"] in ("HIGH", "MEDIUM", "LOW")
     assert len(evidence) >= 4  # victim + a->b + a->decoy1 + b->exchange (+ b->decoy2)
@@ -180,8 +175,7 @@ def run_test_3_direct_exchange_hit_and_threat_intel():
     # there. Because it forwards ~100% within the sweep window, this fixture
     # correctly resolves as a SWEEPER_MATCH (a stronger, behavior-based hit).
     assert result["match_status"] in ("EXCHANGE_MATCH", "SWEEPER_MATCH")
-    assert result["matched_exchange"] == KNOWN_EXCHANGE_WALLETS[EXCHANGE_ADDR]["name"]
-    assert result["matched_exchange_verified"] is False
+    assert result["matched_exchange"] == KNOWN_EXCHANGE_WALLETS[EXCHANGE_ADDR]
     print("TEST 3 PASSED\n")
 
 
@@ -290,54 +284,6 @@ def run_test_5_ignores_unrelated_large_transfers():
     print("TEST 5 PASSED\n")
 
 
-def run_test_6_verified_vs_sample_exchange_match():
-    """
-    Regression test for the verified/sample exchange-match distinction added
-    alongside the 9 real Tronscan-labeled addresses: a trail landing on one
-    of those real addresses must report matched_exchange_verified=True and
-    a "Verified match" note, never blending in with sample-data matches
-    (which tests 1 and 3 already confirm report verified=False). This
-    guards against the two ever being displayed identically to an officer.
-    """
-    from app.trace_engine import trace_wallet
-    from app.exchange_list import KNOWN_EXCHANGE_WALLETS
-
-    verified_addr = next(addr for addr, rec in KNOWN_EXCHANGE_WALLETS.items() if rec["verified"])
-    victim = "TVICTIM00000000000000000000000006"
-    source = _fake_addr("v6src")
-
-    def fake_get(address, direction="all", limit=50, **kwargs):
-        if direction == "in" and address == source:
-            return [{"hash": "victim_tx6", "from_address": victim, "to_address": source,
-                      "amount": 777.0, "timestamp_ms": BASE_TS, "confirmed": True, "success": True}]
-        if direction == "out" and address == source:
-            return [{"hash": "source_to_verified", "from_address": source, "to_address": verified_addr,
-                      "amount": 777.0, "timestamp_ms": BASE_TS + 3600_000, "confirmed": True, "success": True}]
-        return []
-
-    tron_client.get_trc20_transfers = fake_get
-
-    result = trace_wallet(source, reported_amount=777.0, max_hops=4)
-
-    print("=== TEST 6: verified (Tronscan-labeled) exchange match ===")
-    print("match_status:", result["match_status"])
-    print("matched_exchange:", result["matched_exchange"])
-    print("matched_exchange_verified:", result["matched_exchange_verified"])
-    print("matched_exchange_note:", result["matched_exchange_note"])
-
-    assert result["match_status"] in ("EXCHANGE_MATCH", "SWEEPER_MATCH")
-    assert result["matched_exchange"] == KNOWN_EXCHANGE_WALLETS[verified_addr]["name"]
-    assert result["matched_exchange_verified"] is True
-    assert "Verified match" in result["matched_exchange_note"]
-
-    # the hop record itself (what the graph node and PDF row both read from)
-    # must carry the identical flag — this is the single-source-of-truth
-    # guarantee, not just the top-level trace_result summary field.
-    matched_hop = next(h for h in result["hops"] if h["is_exchange_match"])
-    assert matched_hop["matched_exchange_verified"] is True
-    print("TEST 6 PASSED\n")
-
-
 def run_test_4_invalid_address():
     from app.trace_engine import trace_wallet
     try:
@@ -354,5 +300,4 @@ if __name__ == "__main__":
     run_test_3_direct_exchange_hit_and_threat_intel()
     run_test_4_invalid_address()
     run_test_5_ignores_unrelated_large_transfers()
-    run_test_6_verified_vs_sample_exchange_match()
     print("ALL OFFLINE TESTS PASSED")

@@ -27,8 +27,6 @@ CREATE TABLE IF NOT EXISTS cases (
     status TEXT NOT NULL DEFAULT 'TRACING',      -- TRACING | TRACED | FAILED
     match_status TEXT,                            -- EXCHANGE_MATCH | SWEEPER_MATCH | IN_TRANSIT | MIXER_FLAGGED | TRACE_FAILED
     matched_exchange TEXT,
-    matched_exchange_verified INTEGER,             -- NULL = no match, 0 = sample data, 1 = Tronscan-labeled (verified)
-    matched_exchange_note TEXT,                     -- human-readable "Verified match — X" / "Sample match — X" label
     matched_wallet TEXT,
     risk_score REAL,
     priority TEXT,                                 -- HIGH | MEDIUM | LOW
@@ -60,27 +58,6 @@ def init_db():
     conn = get_connection()
     conn.executescript(SCHEMA)
     conn.commit()
-    _migrate_add_missing_columns(conn)
-
-
-def _migrate_add_missing_columns(conn):
-    """
-    Lightweight, additive migration. `CREATE TABLE IF NOT EXISTS` above only
-    creates the table on a brand-new database — if a chaintracer.db from
-    before a column was added (e.g. matched_exchange_verified,
-    matched_exchange_note) already exists on disk, it's left untouched and
-    would otherwise crash the next INSERT with a column-count mismatch. This
-    adds any missing column instead, so upgrading in place just works.
-    """
-    existing_columns = {row[1] for row in conn.execute("PRAGMA table_info(cases)").fetchall()}
-    additive_columns = {
-        "matched_exchange_verified": "INTEGER",
-        "matched_exchange_note": "TEXT",
-    }
-    for col, col_type in additive_columns.items():
-        if col not in existing_columns:
-            conn.execute(f"ALTER TABLE cases ADD COLUMN {col} {col_type}")
-    conn.commit()
 
 
 @contextmanager
@@ -103,6 +80,4 @@ def row_to_case_dict(row: sqlite3.Row) -> dict:
         d[key] = json.loads(raw) if raw else None
     d["is_seed"] = bool(d.get("is_seed"))
     d["alert_sent"] = bool(d.get("alert_sent"))
-    if d.get("matched_exchange_verified") is not None:
-        d["matched_exchange_verified"] = bool(d["matched_exchange_verified"])
     return d

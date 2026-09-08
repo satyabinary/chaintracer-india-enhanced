@@ -58,7 +58,7 @@ from app.config import (
 )
 from app import tron_client
 from app.tron_client import TronApiError
-from app.exchange_list import match_exchange, match_scam_wallet, match_mixer, format_exchange_label
+from app.exchange_list import match_exchange, match_scam_wallet, match_mixer
 
 HOURS_MS = 3600 * 1000
 
@@ -137,8 +137,6 @@ def trace_wallet(source_address: str, reported_amount: float, max_hops: int = DE
     running_taint = 1.0
     match_status = None
     matched_exchange = None
-    matched_exchange_verified = None
-    matched_exchange_note = None
     matched_wallet = None
     stop_reason = None
 
@@ -154,8 +152,6 @@ def trace_wallet(source_address: str, reported_amount: float, max_hops: int = DE
             "taint_level_here": round(running_taint, 4),
             "is_exchange_match": False,
             "matched_exchange_name": None,
-            "matched_exchange_verified": None,
-            "matched_exchange_note": None,
             "is_sweeper_match": False,
             "is_mixer_flag": False,
             "is_threat_intel_hit": False,
@@ -172,19 +168,12 @@ def trace_wallet(source_address: str, reported_amount: float, max_hops: int = DE
             hop_record["is_threat_intel_hit"] = True
 
         # 2. Does this wallet itself sit on the exchange hot-wallet list?
-        #    This check is address-only and applies uniformly to any wallet
-        #    in any trail — it is not tied to which exchange a particular
-        #    scammer was expected to use.
-        exchange_record = match_exchange(current_wallet)
-        if exchange_record:
+        exchange_name = match_exchange(current_wallet)
+        if exchange_name:
             hop_record["is_exchange_match"] = True
-            hop_record["matched_exchange_name"] = exchange_record["name"]
-            hop_record["matched_exchange_verified"] = exchange_record["verified"]
-            hop_record["matched_exchange_note"] = format_exchange_label(exchange_record)
+            hop_record["matched_exchange_name"] = exchange_name
             match_status = "EXCHANGE_MATCH"
-            matched_exchange = exchange_record["name"]
-            matched_exchange_verified = exchange_record["verified"]
-            matched_exchange_note = format_exchange_label(exchange_record)
+            matched_exchange = exchange_name
             matched_wallet = current_wallet
             stop_reason = "EXCHANGE_MATCH"
             hops.append(hop_record)
@@ -283,29 +272,25 @@ def trace_wallet(source_address: str, reported_amount: float, max_hops: int = DE
         sweeper_hit = None
         if incoming_amount and incoming_ts_ms:
             for c in plausible_candidates:
-                ex_record = match_exchange(c["to_address"])
-                if not ex_record:
+                ex_name = match_exchange(c["to_address"])
+                if not ex_name:
                     continue
                 pct = c["amount"] / incoming_amount if incoming_amount else 0
                 gap_hours = (c["timestamp_ms"] - incoming_ts_ms) / HOURS_MS
                 if pct >= SWEEP_PERCENT_THRESHOLD and 0 <= gap_hours <= SWEEP_WINDOW_HOURS:
-                    sweeper_hit = (c, ex_record)
+                    sweeper_hit = (c, ex_name)
                     break
 
         if sweeper_hit:
-            main, ex_record = sweeper_hit
+            main, ex_name = sweeper_hit
             decoys = [c for c in plausible_candidates if c["hash"] != main["hash"]][:MAX_DECOYS_STORED_PER_HOP]
             hop_record["chosen_outgoing"] = main
             hop_record["decoys"] = decoys
             hop_record["is_sweeper_match"] = True
             hop_record["is_exchange_match"] = True
-            hop_record["matched_exchange_name"] = ex_record["name"]
-            hop_record["matched_exchange_verified"] = ex_record["verified"]
-            hop_record["matched_exchange_note"] = format_exchange_label(ex_record)
+            hop_record["matched_exchange_name"] = ex_name
             match_status = "SWEEPER_MATCH"
-            matched_exchange = ex_record["name"]
-            matched_exchange_verified = ex_record["verified"]
-            matched_exchange_note = format_exchange_label(ex_record)
+            matched_exchange = ex_name
             matched_wallet = main["to_address"]
             stop_reason = "SWEEPER_MATCH"
             hops.append(hop_record)
@@ -355,8 +340,6 @@ def trace_wallet(source_address: str, reported_amount: float, max_hops: int = DE
         "match_status": match_status,
         "stop_reason": stop_reason,
         "matched_exchange": matched_exchange,
-        "matched_exchange_verified": matched_exchange_verified,
-        "matched_exchange_note": matched_exchange_note,
         "matched_wallet": matched_wallet,
         "threat_intel_hit": threat_intel_hit,
         "threat_intel_wallet": threat_intel_wallet,
@@ -407,23 +390,13 @@ def build_graph(trace_result: dict) -> dict:
         elif hop["is_mixer_flag"]:
             role = "mixer"
 
-        if hop["is_exchange_match"]:
-            exchange_sublabel = f"{hop['matched_exchange_name']} — " + (
-                "verified" if hop["matched_exchange_verified"] else "sample data"
-            )
-        elif hop["is_mixer_flag"]:
-            exchange_sublabel = "Mixer flagged"
-        else:
-            exchange_sublabel = f"Hop {i}"
-
         nodes.append({
             "data": {
                 "id": hop["wallet"],
                 "label": hop["wallet_short"],
                 "full_address": hop["wallet"],
                 "role": role,
-                "sublabel": exchange_sublabel,
-                "matched_exchange_verified": hop["matched_exchange_verified"],
+                "sublabel": hop["matched_exchange_name"] or ("Mixer flagged" if hop["is_mixer_flag"] else f"Hop {i}"),
                 "taint": hop["taint_level_here"],
                 "threat_intel": hop["is_threat_intel_hit"],
             }
