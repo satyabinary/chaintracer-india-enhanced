@@ -15,7 +15,7 @@ export default function ReferenceListsModal({ onClose }) {
   }, []);
 
   return (
-    <Modal title="Sample threat-intel lists" onClose={onClose} width="max-w-2xl">
+    <Modal title="Threat-intel watchlists" onClose={onClose} width="max-w-2xl">
       {error && <p className="text-sm text-risk-high">{error}</p>}
       {!data && !error && <p className="text-sm text-parchment-500">Loading…</p>}
       {data && (
@@ -38,15 +38,34 @@ function ListBlock({ title, entries }) {
     <div>
       <h3 className="mb-2 text-xs font-medium text-parchment-100">{title}</h3>
       <div className="space-y-1.5">
-        {items.map(([address, label]) => (
-          <div
-            key={address}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line-700 bg-ink-850 px-3 py-2"
-          >
-            <CopyableAddress address={address} className="text-xs" />
-            <span className="text-xs text-parchment-500">{label}</span>
-          </div>
-        ))}
+        {items.map(([address, value]) => {
+          // Scam/mixer lists still hand back a plain label string. The
+          // exchange list now hands back {name, verified, note} so the
+          // verified/sample distinction can be shown here too.
+          const isRecord = value && typeof value === "object";
+          return (
+            <div
+              key={address}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line-700 bg-ink-850 px-3 py-2"
+            >
+              <CopyableAddress address={address} className="text-xs" />
+              {isRecord ? (
+                <span className="flex items-center gap-2 text-xs text-parchment-500">
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                      value.verified ? "bg-confirmed-bg text-confirmed" : "bg-risk-med-bg text-risk-med"
+                    }`}
+                  >
+                    {value.verified ? "Verified" : "Sample"}
+                  </span>
+                  {value.name} — {value.note}
+                </span>
+              ) : (
+                <span className="text-xs text-parchment-500">{value}</span>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

@@ -3,7 +3,8 @@ import CopyableAddress from "./CopyableAddress";
 import StatusPill from "./StatusPill";
 
 export default function ExchangeMatchCard({ caseDetail, onSimulateAlert, alertBusy }) {
-  const { match_status, matched_exchange, matched_wallet, alert_sent, error_message } = caseDetail;
+  const { match_status, matched_exchange, matched_exchange_verified, matched_wallet, alert_sent, error_message } =
+    caseDetail;
   const isExchangeHit = match_status === "EXCHANGE_MATCH" || match_status === "SWEEPER_MATCH";
 
   return (
@@ -15,7 +16,16 @@ export default function ExchangeMatchCard({ caseDetail, onSimulateAlert, alertBu
 
       {isExchangeHit && (
         <div className="rounded-md border border-line-700 bg-ink-850 p-3">
-          <div className="text-sm font-medium text-parchment-100">{matched_exchange}</div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-parchment-100">{matched_exchange}</span>
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                matched_exchange_verified ? "bg-confirmed-bg text-confirmed" : "bg-risk-med-bg text-risk-med"
+              }`}
+            >
+              {matched_exchange_verified ? "Verified — Tronscan label" : "Sample data — not real"}
+            </span>
+          </div>
           <div className="mt-1.5">
             <CopyableAddress address={matched_wallet} full className="text-xs" />
           </div>

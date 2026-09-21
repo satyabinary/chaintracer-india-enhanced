@@ -15,11 +15,28 @@ sends a real email/SMS, or freezes funds — every such action in the UI is clea
 
 - **Real:** the Tronscan API calls, the hop-following logic, the risk-score math, the PDF
   generation, the SQLite storage.
-- **Sample / placeholder, clearly labelled in the UI:** the "known exchange hot wallet",
-  "known scam wallet", and "known mixer" lists in `backend/app/exchange_list.py`. These are
-  procedurally generated addresses shaped like real TRON addresses — they are **not** the real
-  hot wallets of Binance, WazirX, CoinDCX, OKX, or anyone else. Swap in real, verified addresses
-  (from your own threat-intel feed) before using this for anything beyond a demo.
+- **The exchange wallet list is now mixed**, and every entry says which kind it is —
+  in `backend/app/exchange_list.py`, in the API response, and in the UI:
+  - **9 addresses marked `verified: true`** — supplied by the investigating officer as sourced
+    from Tronscan's own address labels (Binance ×4, OKX, KuCoin, Gate.io, Bybit, Bitget).
+    **I could not independently re-confirm these against a second public source** — two spot
+    checks via general web search turned up no corroborating results either way, which just
+    reflects that Tronscan's own address-tag pages aren't well indexed by search engines, not
+    that anything is wrong. **Reload each one on tronscan.org yourself and confirm the label
+    still shows before relying on this in front of anyone**, especially before a live
+    presentation — a single wrong character turns a real address into a dead (or different
+    real) one, and exchanges occasionally rotate hot wallets too.
+  - **The original sample/placeholder addresses are still there too**, marked
+    `verified: false`, clearly labelled as procedurally-generated demo data — not real hot
+    wallets of anyone.
+  - **This is a general pattern-lookup, not a per-case list.** Every wallet in every trail gets
+    checked against the same list, regardless of which case it belongs to — there's no notion
+    of "this scammer is expected to use exchange X." A match just means the trail happened to
+    reach one of these addresses.
+  - A confirmed match visibly says which kind it is everywhere it's shown: a green "Verified
+    match" vs. an amber "Sample match" badge in the exchange-attribution panel, the same
+    distinction in the reference-lists viewer, and a dedicated green/amber banner in the PDF
+    report (not just a line of text that looks the same either way).
 - **A note on the Tronscan integration:** I don't have live network access while building this,
   so `tron_client.py` is written against Tronscan's documented public
   `token_trc20/transfers` response shape from training knowledge, with defensive parsing
@@ -28,6 +45,22 @@ sends a real email/SMS, or freezes funds — every such action in the UI is clea
   Tronscan has changed a field name since, you'll see a clear "Tronscan could not be reached /
   unexpected response shape" error rather than silently wrong data, and the fix is isolated to
   that one file.
+
+## Hop depth is configurable
+
+`DEFAULT_MAX_HOPS` (in `backend/app/config.py`) is the single source of truth for how many hops
+the tracer follows before honestly giving up and marking a case `IN_TRANSIT`. Default is **6**.
+Override it without touching code:
+
+```bash
+export CHAINTRACER_MAX_HOPS=8
+```
+
+Everything that needs to know the hop limit — the tracer itself, the seed data, the PDF report's
+"hop N of M" text, the risk score's hop-depth factor — reads this one value; nothing hardcodes
+its own copy. (Unit tests are a deliberate exception: they use their own small, fixed hop caps to
+exercise specific fixture chains deterministically, independent of whatever the production
+default currently is — see the comment above `DEFAULT_MAX_HOPS` in `config.py`.)
 
 ---
 
