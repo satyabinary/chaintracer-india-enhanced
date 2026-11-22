@@ -254,8 +254,8 @@ def seed_if_empty(force: bool = False):
                     matched_exchange_note, matched_wallet,
                     risk_score, priority, error_message,
                     trace_result_json, risk_breakdown_json, graph_json, evidence_json,
-                    is_seed, alert_sent, created_at, updated_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    is_seed, alert_sent, created_at, updated_at, owner_user_id
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     case_number, f"{spec['victim_name']} ({spec['city']})", spec["wallet_address"],
                     spec["amount_usdt"], spec["notes"],
@@ -264,6 +264,7 @@ def seed_if_empty(force: bool = False):
                     trace_result["matched_wallet"], risk["total_score"], risk["priority"], None,
                     json.dumps(trace_result), json.dumps(risk), json.dumps(graph), json.dumps(evidence),
                     1, 0, filed_on, now,
+                    None,  # owner_user_id: demo cases belong to nobody, so no login sees them
                 ),
             )
         inserted.append({"case_number": case_number, "priority": risk["priority"],

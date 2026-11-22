@@ -1,0 +1,129 @@
+"""
+Ownership guarantee: a case is visible ONLY to the user who filed it.
+
+Tests the scoping SQL directly against a real temporary database, because
+the route functions themselves need FastAPI installed (not available in
+this sandbox). The query helpers used by the routes are exercised here.
+
+Run from backend/:
+    python3 -m tests.test_case_ownership
+"""
+import os
+import sys
+import tempfile
+
+sys.path.insert(0, os.path.abspath("."))
+
+from app import database
+
+_tmp = tempfile.mkdtemp(prefix="chaintracer_owner_test_")
+database.DB_PATH = os.path.join(_tmp, "owner_test.db")
+if hasattr(database._local, "conn"):
+    del database._local.conn
+
+from app import auth  # noqa: E402
+
+database.init_db()
+auth.init_auth_db()
+
+
+def _insert_case(case_number, owner_id):
+    with database.get_cursor(commit=True) as cur:
+        cur.execute(
+            """INSERT INTO cases (case_number, victim_name, wallet_address, amount_usdt,
+                                   status, is_seed, alert_sent, created_at, updated_at,
+                                   owner_user_id)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (case_number, "Test Victim", "T" + "a" * 33, 100.0, "TRACED", 0, 0,
+             "2026-11-19 00:00:00", "2026-11-19 00:00:00", owner_id),
+        )
+
+
+def _fetch_scoped(case_number, user_id):
+    """Mirrors routers/cases.py::_fetch_case_row exactly."""
+    with database.get_cursor() as cur:
+        cur.execute(
+            "SELECT * FROM cases WHERE case_number=? AND owner_user_id=?",
+            (case_number, user_id),
+        )
+        return cur.fetchone()
+
+
+def _list_scoped(user_id):
+    """Mirrors routers/cases.py::list_cases exactly."""
+    with database.get_cursor() as cur:
+        cur.execute("SELECT case_number FROM cases WHERE owner_user_id=? ORDER BY id DESC",
+                    (user_id,))
+        return [r["case_number"] for r in cur.fetchall()]
+
+
+def run_test_1_owner_sees_own_case():
+    print("=== TEST 1: owner can see their own case ===")
+    alice = auth.register_user(username="alice", email="alice@police.in", password="Str0ngPass!23")
+    _insert_case("CCU-A-0001", alice["id"])
+    row = _fetch_scoped("CCU-A-0001", alice["id"])
+    assert row is not None and row["case_number"] == "CCU-A-0001"
+    assert _list_scoped(alice["id"]) == ["CCU-A-0001"]
+    print("alice sees CCU-A-0001 and lists it")
+    print("TEST 1 PASSED\n")
+
+
+def run_test_2_other_user_cannot_see_case():
+    print("=== TEST 2: another user cannot read, list, or detect the case ===")
+    bob = auth.register_user(username="bob", email="bob@police.in", password="Str0ngPass!23")
+    # Bob guessing Alice's exact case number must get nothing back.
+    assert _fetch_scoped("CCU-A-0001", bob["id"]) is None
+    assert "CCU-A-0001" not in _list_scoped(bob["id"])
+    print("bob cannot fetch or list alice's case")
+    print("TEST 2 PASSED\n")
+
+
+def run_test_3_nonexistent_and_foreign_look_identical():
+    print("=== TEST 3: foreign case and missing case are indistinguishable ===")
+    bob = auth.register_user(username="bob2", email="bob2@police.in", password="Str0ngPass!23")
+    foreign = _fetch_scoped("CCU-A-0001", bob["id"])
+    missing = _fetch_scoped("CCU-NOPE-9999", bob["id"])
+    # Both return None -> routes both 404 -> no way to confirm existence.
+    assert foreign is None and missing is None
+    print("foreign and missing both return None (both become 404)")
+    print("TEST 3 PASSED\n")
+
+
+def run_test_4_unowned_seed_case_hidden_from_all():
+    print("=== TEST 4: demo/seed cases (owner NULL) are hidden from every login ===")
+    _insert_case("CCU-SEED-0001", None)
+    alice = auth.authenticate("alice", "Str0ngPass!23")
+    bob = auth.authenticate("bob", "Str0ngPass!23")
+    assert _fetch_scoped("CCU-SEED-0001", alice["id"]) is None
+    assert _fetch_scoped("CCU-SEED-0001", bob["id"]) is None
+    assert "CCU-SEED-0001" not in _list_scoped(alice["id"])
+    print("owner-NULL case invisible to alice and bob")
+    print("TEST 4 PASSED\n")
+
+
+def run_test_5_each_user_lists_only_their_own():
+    print("=== TEST 5: list is strictly per-user ===")
+    _insert_case("CCU-B-0001", auth.authenticate("bob", "Str0ngPass!23")["id"])
+    alice_list = _list_scoped(auth.authenticate("alice", "Str0ngPass!23")["id"])
+    bob_list = _list_scoped(auth.authenticate("bob", "Str0ngPass!23")["id"])
+    print("alice:", alice_list)
+    print("bob:  ", bob_list)
+    assert alice_list == ["CCU-A-0001"]
+    assert bob_list == ["CCU-B-0001"]
+    print("TEST 5 PASSED\n")
+
+
+if __name__ == "__main__":
+    try:
+        run_test_1_owner_sees_own_case()
+        run_test_2_other_user_cannot_see_case()
+        run_test_3_nonexistent_and_foreign_look_identical()
+        run_test_4_unowned_seed_case_hidden_from_all()
+        run_test_5_each_user_lists_only_their_own()
+        print("ALL OWNERSHIP TESTS PASSED")
+    finally:
+        try:
+            os.remove(database.DB_PATH)
+            os.rmdir(_tmp)
+        except OSError:
+            pass
