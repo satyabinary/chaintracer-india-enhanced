@@ -24,8 +24,8 @@ CREATE TABLE IF NOT EXISTS cases (
     wallet_address TEXT NOT NULL,
     amount_usdt REAL NOT NULL,
     notes TEXT DEFAULT '',
-    status TEXT NOT NULL DEFAULT 'TRACING',      -- TRACING | TRACED | FAILED
-    match_status TEXT,                            -- EXCHANGE_MATCH | SWEEPER_MATCH | IN_TRANSIT | MIXER_FLAGGED | TRACE_FAILED
+    status TEXT NOT NULL DEFAULT 'TRACING',      -- TRACING | TRACED | UNVERIFIED | FAILED | RATE_LIMITED
+    match_status TEXT,                            -- EXCHANGE_MATCH | SWEEPER_MATCH | IN_TRANSIT | MIXER_FLAGGED | AMOUNT_NOT_VERIFIED | TRACE_FAILED | RATE_LIMITED | TRACE_INCOMPLETE_RATE_LIMITED
     matched_exchange TEXT,
     matched_exchange_verified INTEGER,             -- NULL = no match, 0 = sample data, 1 = Tronscan-labeled (verified)
     matched_exchange_note TEXT,                     -- human-readable "Verified match — X" / "Sample match — X" label
@@ -76,6 +76,9 @@ def _migrate_add_missing_columns(conn):
     additive_columns = {
         "matched_exchange_verified": "INTEGER",
         "matched_exchange_note": "TEXT",
+        # Owner of the case. NULL = seed/demo case, visible to nobody who
+        # logs in (see routers/cases.py). Existing rows keep NULL on upgrade.
+        "owner_user_id": "INTEGER",
     }
     for col, col_type in additive_columns.items():
         if col not in existing_columns:
