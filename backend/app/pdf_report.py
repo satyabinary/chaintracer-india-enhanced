@@ -257,6 +257,91 @@ def _evidence_table(evidence: list, styles):
     return t
 
 
+TRONSCAN_TX_URL = "https://tronscan.org/#/transaction/{}"
+TRONSCAN_ADDR_URL = "https://tronscan.org/#/address/{}"
+
+
+def _plain_summary_text(case: dict) -> str:
+    """
+    One plain-language paragraph a non-technical reader can follow. Built
+    only from fields the trace already produced — it never adds a claim
+    the trace didn't make.
+    """
+    tr = case.get("trace_result") or {}
+    hops = len(tr.get("hops") or [])
+    max_hops = tr.get("max_hops")
+    status = case.get("match_status") or ""
+    wallet = case.get("wallet_address", "")
+    amount = f"{case['amount_usdt']:,.2f} USDT"
+
+    if case.get("status") == "RATE_LIMITED":
+        return (f"{amount} was reported as sent to wallet {wallet}. The trace could not be "
+                f"completed right now because the blockchain data service was temporarily busy. "
+                f"Re-run the trace before relying on this report.")
+
+    lead = f"{amount} was reported as sent to wallet {wallet}. The public blockchain record shows "
+    if status in ("EXCHANGE_MATCH", "SWEEPER_MATCH"):
+        ex = case.get("matched_exchange") or "a known exchange"
+        verified = case.get("matched_exchange_verified")
+        basis = ("a wallet listed as a verified exchange wallet" if verified
+                 else "a wallet matching SAMPLE data only (not a real exchange address)")
+        if verified:
+            action = (f"Exchanges can identify their own account holders, so the next step is a "
+                      f"request to {ex} with the transaction references below.")
+        else:
+            action = ("This match is not a verified exchange address, so do not send a complaint "
+                      "to the exchange based on it. Re-check the wallet on tronscan.org first.")
+        return (lead + f"the money moved through {hops} wallet(s) and reached {basis} "
+                f"belonging to {ex}. " + action)
+    if status == "MIXER_FLAGGED":
+        return (lead + f"the money reached a wallet on a known mixing service after {hops} "
+                f"step(s). Mixers hide the trail, so tracing stopped there.")
+    if status == "IN_TRANSIT":
+        limit = f" within {max_hops} steps" if max_hops else ""
+        return (lead + f"the money was still moving between wallets when tracing ended{limit}. "
+                f"No known exchange wallet was reached. The trail can be re-checked later as "
+                f"new transactions appear.")
+    return (lead + f"the trail was traced for {hops} step(s). See the evidence table for the "
+            f"exact transactions.")
+
+
+def _verify_section(case: dict, styles):
+    """Links the complainant can open to check every reference independently."""
+    if case.get("is_seed"):
+        return [Paragraph(
+            "Demonstration case: the references in this report are synthetic and will not open "
+            "on tronscan.org. Verification links are only meaningful for real filed cases.",
+            styles["BodySmall"])]
+    items = [Paragraph(
+        "<b>Verify it yourself:</b> every transaction and wallet below can be opened on "
+        "tronscan.org, a public blockchain explorer. Matching the references here with the "
+        "explorer confirms this report is accurate.", styles["BodySmall"])]
+    items.append(Spacer(1, 4))
+    items.append(Paragraph(
+        "Reported wallet: " + TRONSCAN_ADDR_URL.format(case["wallet_address"]), styles["Mono"]))
+    for row in (case.get("evidence") or [])[:8]:
+        h = row.get("hash")
+        if h:
+            items.append(Paragraph(
+                f"{row.get('role', 'transaction')}: " + TRONSCAN_TX_URL.format(h), styles["Mono"]))
+    evidence_count = len(case.get("evidence") or [])
+    if evidence_count > 8:
+        items.append(Paragraph(
+            f"...and {evidence_count - 8} more, listed in the Transaction evidence table.",
+            styles["BodySmall"]))
+    return items
+
+
+def _complaint_guidance(styles):
+    return Paragraph(
+        "<b>Using this report for a complaint:</b> attach this PDF along with the victim's "
+        "screenshots, bank or wallet receipts and the transaction references above when "
+        "filing with the national cybercrime reporting portal (cybercrime.gov.in), the bank, "
+        "or the exchange's support team. The investigating authority decides what action to "
+        "take. This report does not itself establish who received the money.",
+        styles["BodySmall"])
+
+
 def generate_case_pdf(case: dict) -> str:
     """
     Build the PDF for a case dict (as produced by database.row_to_case_dict)
@@ -287,6 +372,12 @@ def generate_case_pdf(case: dict) -> str:
         story.append(Spacer(1, 14))
     else:
         story.append(Spacer(1, 6))
+
+    story.append(Paragraph("What this report shows", styles["SectionHeading"]))
+    story.append(Paragraph(_plain_summary_text(case), styles["BodySmall"]))
+    story.append(Spacer(1, 10))
+    story.append(_complaint_guidance(styles))
+    story.append(Spacer(1, 10))
 
     if case.get("is_seed"):
         story.append(Paragraph(
@@ -320,13 +411,20 @@ def generate_case_pdf(case: dict) -> str:
         story.append(_evidence_table(case["evidence"], styles))
         story.append(Spacer(1, 14))
 
+    if case.get("status") != "RATE_LIMITED":
+        story.append(Spacer(1, 4))
+        story.append(Paragraph("Verify on the public blockchain", styles["SectionHeading"]))
+        story += _verify_section(case, styles)
+        story.append(Spacer(1, 14))
+
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#CBD5E0")))
     story.append(Spacer(1, 6))
     story.append(Paragraph(
-        "This report is an investigative aid generated by ChainTracer India. It recommends and "
-        "documents a fund trail and risk assessment only — it does not freeze accounts, contact "
-        "exchanges, or move funds automatically. All findings should be independently verified "
-        "before use in legal proceedings.", styles["Disclaimer"]))
+        "Disclaimer: this report is an investigative aid generated by ChainTracer India from "
+        "publicly available blockchain records. It is not a legal finding and does not establish "
+        "who controls any wallet. It does not freeze accounts, contact exchanges, or move funds. "
+        "The trail, risk score and exchange attribution should be independently verified by the "
+        "receiving authority before any action is taken.", styles["Disclaimer"]))
 
     doc.build(story)
     return output_path
